@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "electron": "vite build && electron .",
-    "dist:mac": "vite build && electron-builder --mac"
+    "dist:mac": "vite build && electron-builder --mac --publish never"
   },
   "devDependencies": {
     "@fontsource/bebas-neue": "^5.3.0",
