@@ -2,6 +2,11 @@ name: DMG para macOS
 
 on:
   workflow_dispatch:
+    inputs:
+      publicar:
+        description: 'Publicar como versión (crea la etiqueta v<versión de package.json> y la Release)'
+        type: boolean
+        default: false
   push:
     branches: ['**']
     tags: ['v*']
@@ -43,8 +48,17 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publicar en Releases (solo etiquetas v*)
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Versión
+        id: version
+        run: echo "tag=v$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Publicar en Releases (etiquetas v* o lanzamiento manual con «publicar»)
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.publicar
         uses: softprops/action-gh-release@v2
         with:
+          # En un lanzamiento manual la etiqueta se crea sobre el commit compilado.
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: Posavasos ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || steps.version.outputs.tag }}
+          generate_release_notes: true
           files: release/*.dmg
