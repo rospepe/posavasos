@@ -122,6 +122,7 @@ legend + * {
 .field input[type='range'],
 .field select,
 .field textarea,
+.field input[type='text'],
 .field .file {
   grid-column: 1 / -1;
   width: 100%;
@@ -132,7 +133,8 @@ input[type='range'] {
 }
 
 select,
-textarea {
+textarea,
+input[type='text'] {
   font: inherit;
   color: var(--text);
   background: var(--bg);

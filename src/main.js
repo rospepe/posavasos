@@ -24,6 +24,7 @@ function loadParams() {
       const p = withDefaults(saved);
       // Las fuentes subidas no se guardan: si faltan, se vuelve a la predeterminada.
       if (!FONTS.some((f) => f.id === p.text.font)) p.text.font = DEFAULTS.text.font;
+      if (!FONTS.some((f) => f.id === p.spiral.font)) p.spiral.font = DEFAULTS.spiral.font;
       return p;
     }
   } catch {
@@ -124,6 +125,24 @@ const SECTIONS = [
         unit: '×',
         show: (p) => String(p.text.content).includes('\n'),
       },
+    ],
+  },
+  {
+    title: 'Texto en espiral',
+    toggle: 'spiral.enabled',
+    fields: [
+      { type: 'hint', text: 'Recorre el posavasos desde el borde hacia el centro siguiendo su forma.' },
+      { path: 'spiral.content', label: 'Texto', type: 'textarea' },
+      { path: 'spiral.repeat', label: 'Repetir hasta llenar la espiral', type: 'checkbox' },
+      { path: 'spiral.separator', label: 'Separador entre repeticiones', type: 'text', show: (p) => p.spiral.repeat },
+      { path: 'spiral.font', label: 'Tipografía', type: 'font' },
+      { path: 'spiral.mode', type: 'segmented', options: MODE },
+      { path: 'spiral.size', label: 'Tamaño de letra', type: 'range', min: 3, max: 20, step: 0.5, unit: 'mm' },
+      { path: 'spiral.depth', label: 'Profundidad / altura', type: 'range', min: 0.2, max: 3, step: 0.1, unit: 'mm' },
+      { path: 'spiral.lineSpacing', label: 'Separación entre vueltas', type: 'range', min: 1, max: 3, step: 0.05, unit: '×' },
+      { path: 'spiral.letterSpacing', label: 'Espaciado entre letras', type: 'range', min: -1, max: 4, step: 0.1, unit: 'mm' },
+      { path: 'spiral.innerRadius', label: 'Hueco central', type: 'range', min: 0, max: 60, step: 1, unit: 'mm' },
+      { path: 'spiral.startAngle', label: 'Punto de inicio', type: 'range', min: 0, max: 360, step: 5, unit: '°' },
     ],
   },
   {
@@ -291,6 +310,29 @@ function renderField(f) {
         group.append(l);
       }
       wrap.append(group);
+      break;
+    }
+    case 'checkbox': {
+      const cb = document.createElement('input');
+      Object.assign(cb, { type: 'checkbox', id, checked: !!get(f.path) });
+      cb.addEventListener('change', () => {
+        set(f.path, cb.checked);
+        changed();
+      });
+      const l = label();
+      l.className = 'switch';
+      l.prepend(cb);
+      wrap.append(l);
+      break;
+    }
+    case 'text': {
+      const input = document.createElement('input');
+      Object.assign(input, { type: 'text', id, value: get(f.path) });
+      input.addEventListener('input', () => {
+        set(f.path, input.value);
+        changed();
+      });
+      wrap.append(label(), input);
       break;
     }
     case 'textarea': {
@@ -532,6 +574,7 @@ function showInfo(r) {
     (params.border.enabled) ||
     (params.text.enabled && params.text.mode === 'emboss') ||
     (params.logo.enabled && params.logo.contours && params.logo.mode === 'emboss') ||
+    (params.spiral.enabled && params.spiral.mode === 'emboss') ||
     (params.pattern.type !== 'none' && params.pattern.mode === 'emboss');
   if (embossed) {
     const li = document.createElement('li');
@@ -544,7 +587,7 @@ function showInfo(r) {
 downloadBtn.addEventListener('click', () => {
   if (!latest) return;
   const slug =
-    (params.text.enabled ? params.text.content : '')
+    (params.text.enabled ? params.text.content : params.spiral.enabled ? params.spiral.content : '')
       .normalize('NFD')
       .replace(/[̀-ͯ]/g, '')
       .toLowerCase()

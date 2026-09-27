@@ -32,9 +32,14 @@ self.onmessage = async ({ data }) => {
   if (data.type !== 'build') return;
   try {
     const wasm = await ready;
-    const fontId = data.params.text.font;
-    const font = data.params.text.enabled ? await getFont(fontId) : null;
-    const result = buildCoaster(wasm, data.params, font ? { [fontId]: font } : {});
+    const { text, spiral } = data.params;
+    const ids = [...new Set([text.enabled && text.font, spiral?.enabled && spiral.font].filter(Boolean))];
+    const fonts = {};
+    for (const id of ids) {
+      const font = await getFont(id);
+      if (font) fonts[id] = font;
+    }
+    const result = buildCoaster(wasm, data.params, fonts);
     self.postMessage({ type: 'result', id: data.id, ...result }, [result.positions.buffer, result.indices.buffer]);
   } catch (e) {
     self.postMessage({ type: 'error', id: data.id, message: e?.message || String(e) });

@@ -117,3 +117,58 @@ describe('espacio libre del patrón', () => {
     expect(badEdges(wide)).toBe(0);
   });
 });
+
+describe('texto en espiral', () => {
+  const spiral = { enabled: true, content: 'Feliz cumpleaños', font: 'roboto' };
+
+  for (const shape of ['circle', 'square', 'hexagon', 'heart']) {
+    it(`llena una espiral que sigue la forma ${shape} y la malla es cerrada`, () => {
+      const plain = build({ shape, text: { enabled: false } });
+      const r = build({ shape, text: { enabled: false }, spiral });
+      expect(r.volume).toBeGreaterThan(plain.volume + 50);
+      expect(badEdges(r)).toBe(0);
+      expect(r.warnings).toEqual([]);
+    });
+  }
+
+  it('repetir llena más que escribir el texto una sola vez', () => {
+    const base = build({ text: { enabled: false } }).volume;
+    const once = build({ text: { enabled: false }, spiral: { ...spiral, repeat: false } }).volume - base;
+    const many = build({ text: { enabled: false }, spiral }).volume - base;
+    expect(many).toBeGreaterThan(once * 3);
+  });
+
+  it('un hueco central mayor deja menos texto', () => {
+    const small = build({ text: { enabled: false }, spiral: { ...spiral, innerRadius: 10 } }).volume;
+    const big = build({ text: { enabled: false }, spiral: { ...spiral, innerRadius: 30 } }).volume;
+    expect(big).toBeLessThan(small);
+  });
+
+  it('se combina con texto central grabado y patrón', () => {
+    const r = build({
+      text: { font: 'pacifico', content: 'Ana', mode: 'engrave' },
+      spiral: { ...spiral, mode: 'engrave' },
+      pattern: { type: 'rings', mode: 'emboss' },
+    });
+    expect(badEdges(r)).toBe(0);
+  });
+
+  it('avisa si no cabe ninguna vuelta', () => {
+    const r = build({ size: 50, text: { enabled: false }, spiral: { ...spiral, innerRadius: 40 } });
+    expect(r.warnings.some((w) => w.includes('No cabe'))).toBe(true);
+  });
+});
+
+describe('spiralPath', async () => {
+  const { spiralPath } = await import('../src/coaster.js');
+  it('va de fuera hacia dentro en sentido horario', () => {
+    const circle = (r) => Array.from({ length: 64 }, (_, i) => [r * Math.cos((i / 64) * 2 * Math.PI), r * Math.sin((i / 64) * 2 * Math.PI)]);
+    const path = spiralPath([circle(40), circle(30), circle(20)], Math.PI / 2, 128);
+    const r = path.map(([x, y]) => Math.hypot(x, y));
+    expect(r[0]).toBeCloseTo(40, 0);
+    expect(r[r.length - 1]).toBeCloseTo(20, 0);
+    for (let i = 1; i < r.length; i++) expect(r[i]).toBeLessThanOrEqual(r[i - 1] + 0.05);
+    // Horario: justo después de arrancar arriba, x crece.
+    expect(path[1][0]).toBeGreaterThan(path[0][0]);
+  });
+});

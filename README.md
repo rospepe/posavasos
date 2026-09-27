@@ -10,6 +10,9 @@ Todo se calcula en el navegador: no hay servidor ni se sube nada.
 - **Texto** de una o varias líneas, en **relieve o grabado**, con 5 tipografías incluidas
   (acentos, ñ, ¡, ¿…) o **tu propia fuente** (.ttf, .otf, .woff). Tamaño, posición,
   espaciado e interlineado.
+- **Texto en espiral**: recorre el posavasos desde el borde hacia el centro siguiendo su
+  forma (espiral circular, cuadrada, hexagonal, en corazón…) y se repite hasta llenarla.
+  Solo coloca palabras enteras y esquiva el hueco central y el texto/logo del centro.
 - **Logotipo SVG** en relieve o grabado (se usan las formas con relleno).
 - **Patrón de fondo**: anillos, puntos, rayas u ondas, en relieve o grabado, con un espacio
   libre ajustable alrededor del texto y el logo para que se lean bien.
