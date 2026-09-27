@@ -26,7 +26,7 @@ jobs:
       - name: Pruebas
         run: npm test
 
-      - name: Construir DMG (universal: Apple Silicon + Intel)
+      - name: 'Construir DMG (universal: Apple Silicon + Intel)'
         run: npm run dist:mac
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
