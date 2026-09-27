@@ -44,8 +44,10 @@ npm run build     # versión estática en dist/ (se puede publicar en GitHub Pag
 
 El DMG se genera automáticamente en GitHub Actions (workflow **«DMG para macOS»**) en cada
 push: descárgalo desde la pestaña *Actions* → última ejecución → artefacto `Posavasos-dmg`.
-Si creas una etiqueta `v*` (p. ej. `git tag v0.1.0 && git push --tags`), el DMG se publica
-además en *Releases*. Es una app universal (Apple Silicon e Intel).
+Para publicar una versión en *Releases* (con enlace permanente al DMG): sube la versión en
+`package.json` y lanza el workflow a mano (*Actions → DMG para macOS → Run workflow*) marcando
+**«publicar»**; crea la etiqueta `v<versión>` y la Release. También vale subir una etiqueta
+`v*` con git. Es una app universal (Apple Silicon e Intel).
 
 **Instalación:** abre el DMG y arrastra *Posavasos* a *Aplicaciones*.
 
