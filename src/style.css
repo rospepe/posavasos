@@ -280,6 +280,17 @@ button.link {
   touch-action: none;
 }
 
+.no-webgl {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  height: fit-content;
+  max-width: 32em;
+  padding: 0 24px;
+  text-align: center;
+  color: var(--muted);
+}
+
 .toolbar {
   display: flex;
   align-items: center;

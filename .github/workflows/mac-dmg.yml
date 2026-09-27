@@ -1,0 +1,50 @@
+name: DMG para macOS
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['**']
+    tags: ['v*']
+    paths-ignore: ['**.md']
+
+permissions:
+  contents: write
+
+jobs:
+  dmg:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Pruebas
+        run: npm test
+
+      - name: Construir DMG (universal: Apple Silicon + Intel)
+        run: npm run dist:mac
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Comprobar el DMG
+        run: |
+          ls -lh release/*.dmg
+          hdiutil verify release/*.dmg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Posavasos-dmg
+          path: release/*.dmg
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publicar en Releases (solo etiquetas v*)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*.dmg

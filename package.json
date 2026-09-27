@@ -8,21 +8,57 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "electron": "vite build && electron .",
+    "dist:mac": "vite build && electron-builder --mac"
   },
-  "dependencies": {
+  "devDependencies": {
     "@fontsource/bebas-neue": "^5.3.0",
     "@fontsource/lobster": "^5.3.0",
     "@fontsource/pacifico": "^5.3.0",
     "@fontsource/playfair-display": "^5.3.0",
     "@fontsource/roboto": "^5.3.0",
+    "electron": "^44.4.5",
+    "electron-builder": "^26.15.3",
+    "happy-dom": "^20.14.5",
     "manifold-3d": "^3.5.4",
     "opentype.js": "^2.0.0",
-    "three": "^0.186.1"
-  },
-  "devDependencies": {
-    "happy-dom": "^20.14.5",
+    "three": "^0.186.1",
     "vite": "^8.3.1",
     "vitest": "^5.0.2"
+  },
+  "main": "electron/main.cjs",
+  "author": "rospepe",
+  "build": {
+    "appId": "com.rospepe.posavasos",
+    "productName": "Posavasos",
+    "copyright": "Copyright © 2026 rospepe",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**",
+      "electron/**",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.graphics-design",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "identity": "-",
+      "hardenedRuntime": false
+    },
+    "dmg": {
+      "title": "Posavasos ${version}",
+      "artifactName": "Posavasos-${version}.dmg"
+    }
   }
 }

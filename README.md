@@ -29,6 +29,26 @@ npm test          # pruebas de geometría (comprueban que las mallas son cerrada
 npm run build     # versión estática en dist/ (se puede publicar en GitHub Pages, Netlify…)
 ```
 
+## App para Mac (.dmg)
+
+El DMG se genera automáticamente en GitHub Actions (workflow **«DMG para macOS»**) en cada
+push: descárgalo desde la pestaña *Actions* → última ejecución → artefacto `Posavasos-dmg`.
+Si creas una etiqueta `v*` (p. ej. `git tag v0.1.0 && git push --tags`), el DMG se publica
+además en *Releases*. Es una app universal (Apple Silicon e Intel).
+
+**Instalación:** abre el DMG y arrastra *Posavasos* a *Aplicaciones*.
+
+La app no está firmada con un certificado de Apple Developer, así que la primera vez macOS
+la bloqueará. Para abrirla:
+
+1. Intenta abrirla una vez (aparecerá el aviso) y ciérralo.
+2. Ve a *Ajustes del Sistema → Privacidad y seguridad* y pulsa **«Abrir igualmente»**.
+
+O desde Terminal: `xattr -dr com.apple.quarantine /Applications/Posavasos.app`
+
+Para generarlo en tu propio Mac: `npm install && npm run dist:mac` (queda en `release/`).
+Para probar la versión de escritorio sin empaquetar: `npm run electron`.
+
 ### Consejo de impresión a dos colores
 
 Si hay relieves (borde, texto, logo o patrón), añade en el laminador un cambio de filamento
@@ -44,6 +64,7 @@ indica la altura exacta.
 | `src/main.js` | Interfaz: formulario, visor 3D (three.js) y descarga. |
 | `src/stl.js` | Exportador de STL binario. |
 | `src/fonts.js` | Tipografías incluidas. |
+| `electron/main.cjs` | Envoltorio de escritorio (Electron) usado para la app de Mac. |
 | `test/` | Pruebas con Vitest. |
 
 ## Licencias de terceros

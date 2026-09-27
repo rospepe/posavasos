@@ -395,14 +395,23 @@ function refreshVisibility() {
 // Visor 3D
 
 const container = document.getElementById('viewer');
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-container.append(renderer.domElement);
+// Sin WebGL no hay vista previa, pero se puede seguir generando y descargando el STL.
+let renderer = null;
+try {
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  container.append(renderer.domElement);
+} catch {
+  const msg = document.createElement('p');
+  msg.className = 'no-webgl';
+  msg.textContent = 'Este equipo no permite la vista previa 3D (WebGL), pero puedes descargar el STL igualmente.';
+  container.append(msg);
+}
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(35, 1, 1, 5000);
 camera.up.set(0, 0, 1);
-const controls = new OrbitControls(camera, renderer.domElement);
+const controls = new OrbitControls(camera, renderer?.domElement ?? container);
 controls.enableDamping = true;
 
 scene.add(new THREE.HemisphereLight(0xffffff, 0x8a7f72, 1.6));
@@ -436,14 +445,14 @@ function resetView() {
 
 function resize() {
   const { clientWidth: w, clientHeight: h } = container;
-  if (!w || !h) return;
+  if (!w || !h || !renderer) return;
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
 }
 new ResizeObserver(resize).observe(container);
 
-renderer.setAnimationLoop(() => {
+renderer?.setAnimationLoop(() => {
   controls.update();
   renderer.render(scene, camera);
 });
