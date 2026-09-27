@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Diseña posavasos personalizados y descárgalos en STL para imprimir en 3D." />
+    <title>Posavasos personalizados</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='7' fill='%23c2552d'/><circle cx='8' cy='8' r='4.5' fill='none' stroke='white' stroke-width='1.2'/></svg>" />
+  </head>
+  <body>
+    <div class="app">
+      <aside class="panel">
+        <header class="brand">
+          <h1>Posavasos</h1>
+          <p>Diseña tu posavasos y descárgalo en STL para imprimirlo en 3D.</p>
+        </header>
+        <form id="controls" autocomplete="off"></form>
+        <footer class="panel-footer">
+          <button type="button" id="reset" class="link">Restablecer valores</button>
+        </footer>
+      </aside>
+
+      <main class="stage">
+        <div id="viewer" class="viewer" aria-label="Vista previa 3D"></div>
+        <div class="toolbar">
+          <div class="status" id="status" role="status">Cargando…</div>
+          <div class="actions">
+            <label class="color" title="Color de la vista previa">
+              <input type="color" id="previewColor" value="#c2552d" />
+            </label>
+            <button type="button" id="resetView" class="secondary">Centrar vista</button>
+            <button type="button" id="download" class="primary" disabled>Descargar STL</button>
+          </div>
+        </div>
+        <section class="info">
+          <dl id="stats"></dl>
+          <ul id="warnings" class="warnings"></ul>
+        </section>
+      </main>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
