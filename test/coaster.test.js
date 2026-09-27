@@ -127,7 +127,8 @@ describe('texto en espiral', () => {
       const r = build({ shape, text: { enabled: false }, spiral });
       expect(r.volume).toBeGreaterThan(plain.volume + 50);
       expect(badEdges(r)).toBe(0);
-      expect(r.warnings).toEqual([]);
+      // Solo se admiten avisos informativos sobre el tamaño de letra (formas estrechas).
+      expect(r.warnings.filter((w) => !w.includes('reducido') && !w.includes('miden'))).toEqual([]);
     });
   }
 
@@ -160,7 +161,7 @@ describe('texto en espiral', () => {
 });
 
 describe('spiralPath', async () => {
-  const { spiralPath } = await import('../src/coaster.js');
+  const { spiralPath, textAlongPath } = await import('../src/coaster.js');
   it('va de fuera hacia dentro en sentido horario', () => {
     const circle = (r) => Array.from({ length: 64 }, (_, i) => [r * Math.cos((i / 64) * 2 * Math.PI), r * Math.sin((i / 64) * 2 * Math.PI)]);
     const path = spiralPath([circle(40), circle(30), circle(20)], Math.PI / 2, 128);
@@ -170,5 +171,45 @@ describe('spiralPath', async () => {
     for (let i = 1; i < r.length; i++) expect(r[i]).toBeLessThanOrEqual(r[i - 1] + 0.05);
     // Horario: justo después de arrancar arriba, x crece.
     expect(path[1][0]).toBeGreaterThan(path[0][0]);
+  });
+
+  const circle = (r) => Array.from({ length: 96 }, (_, i) => [r * Math.cos((i / 96) * 2 * Math.PI), r * Math.sin((i / 96) * 2 * Math.PI)]);
+  const rings = [42, 32, 24, 18].map(circle);
+  const sizes = [8, 6.5, 5, 4];
+
+  it('interpola el tamaño de cada anillo a lo largo del camino', () => {
+    const path = spiralPath(rings, Math.PI / 2, 128, sizes);
+    expect(path[0][2]).toBeCloseTo(8, 5);
+    expect(path[path.length - 1][2]).toBeCloseTo(4, 5);
+  });
+
+  it('las letras van de grandes a pequeñas', () => {
+    const path = spiralPath(rings, Math.PI / 2, 128, sizes);
+    const r = textAlongPath(fonts.roboto, path, { content: 'Hola mundo', separator: ' · ', repeat: true, size: 8, letterSpacing: 0 });
+    const first = r.placed[0].size;
+    const last = r.placed[r.placed.length - 1].size;
+    expect(first).toBeGreaterThan(7.5);
+    expect(last).toBeLessThan(4.6);
+  });
+
+  it('con ajuste perfecto termina justo al final y con repeticiones completas', () => {
+    const path = spiralPath(rings, Math.PI / 2, 128, sizes);
+    const s = { content: 'Hola mundo', separator: ' · ', repeat: true, size: 8, letterSpacing: 0, fit: true };
+    const r = textAlongPath(fonts.roboto, path, s);
+    expect(r.fitted).toBe(true);
+    expect(r.gamma).toBeGreaterThan(0.8);
+    expect(r.gamma).toBeLessThan(1.15);
+    expect(r.total - r.end).toBeLessThan(0.5); // sin hueco al final
+    const text = r.placed.map((p) => p.ch).join('');
+    expect(text.endsWith('Hola mundo')).toBe(true);
+    expect(text.startsWith('Hola mundo · Hola')).toBe(true);
+  });
+
+  it('sin repetir, el ajuste perfecto agranda el texto para llenar el camino (con límite)', () => {
+    const path = spiralPath(rings.slice(0, 2), Math.PI / 2, 128, sizes.slice(0, 2));
+    const r = textAlongPath(fonts.roboto, path, { content: 'Feliz cumpleaños, Ana', repeat: false, size: 5, letterSpacing: 0, fit: true });
+    const plain = textAlongPath(fonts.roboto, path, { content: 'Feliz cumpleaños, Ana', repeat: false, size: 5, letterSpacing: 0 });
+    expect(r.gamma).toBeGreaterThan(1);
+    expect(r.end).toBeGreaterThan(plain.end);
   });
 });

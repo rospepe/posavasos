@@ -137,7 +137,18 @@ const SECTIONS = [
       { path: 'spiral.separator', label: 'Separador entre repeticiones', type: 'text', show: (p) => p.spiral.repeat },
       { path: 'spiral.font', label: 'Tipografía', type: 'font' },
       { path: 'spiral.mode', type: 'segmented', options: MODE },
-      { path: 'spiral.size', label: 'Tamaño de letra', type: 'range', min: 3, max: 20, step: 0.5, unit: 'mm' },
+      { path: 'spiral.size', label: 'Tamaño de letra al empezar (borde)', type: 'range', min: 3, max: 20, step: 0.5, unit: 'mm' },
+      { path: 'spiral.sizeEnd', label: 'Tamaño de letra al terminar (centro)', type: 'range', min: 2, max: 20, step: 0.5, unit: 'mm' },
+      {
+        path: 'spiral.adaptive',
+        label: 'Adaptar el tamaño al espacio (letras mayores donde hay más sitio)',
+        type: 'checkbox',
+      },
+      {
+        path: 'spiral.fit',
+        label: 'Ajuste perfecto (el texto termina justo al final, retocando el tamaño)',
+        type: 'checkbox',
+      },
       { path: 'spiral.depth', label: 'Profundidad / altura', type: 'range', min: 0.2, max: 3, step: 0.1, unit: 'mm' },
       { path: 'spiral.lineSpacing', label: 'Separación entre vueltas', type: 'range', min: 1, max: 3, step: 0.05, unit: '×' },
       { path: 'spiral.letterSpacing', label: 'Espaciado entre letras', type: 'range', min: -1, max: 4, step: 0.1, unit: 'mm' },
@@ -500,6 +511,13 @@ renderer?.setAnimationLoop(() => {
 });
 
 document.getElementById('resetView').addEventListener('click', resetView);
+document.getElementById('topView').addEventListener('click', () => {
+  // Justo encima (con un pelín de inclinación para que OrbitControls no se bloquee).
+  const r = Math.max(params.size, 60);
+  camera.position.set(0, -0.001, r * 2.6);
+  controls.target.set(0, 0, 0);
+  controls.update();
+});
 document.getElementById('previewColor').addEventListener('input', (e) => material.color.set(e.target.value));
 
 // ---------------------------------------------------------------------------

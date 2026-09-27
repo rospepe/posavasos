@@ -37,11 +37,14 @@ export const DEFAULTS = {
     separator: ' · ',
     repeat: true,
     font: 'roboto',
-    size: 6,
+    size: 8, // tamaño de letra al empezar (borde)
+    sizeEnd: 4.5, // tamaño de letra al terminar (centro)
+    fit: true, // «ajuste perfecto»: el texto termina justo al final de la espiral
+    adaptive: true, // letras más grandes donde las vueltas quedan más separadas
     depth: 0.8,
     mode: 'emboss',
-    lineSpacing: 1.35, // separación entre vueltas, en múltiplos del tamaño de letra
-    letterSpacing: 0.3,
+    lineSpacing: 1.3, // separación entre vueltas, en múltiplos del tamaño de letra
+    letterSpacing: 0.3, // mm (con el tamaño inicial; se escala con la letra)
     innerRadius: 6, // radio del hueco central libre (mm); el texto y el logo centrales se esquivan solos
     startAngle: 90, // grados; 90 = arriba
   },
@@ -57,6 +60,10 @@ const QUALITY = {
   normal: { curve: 10, round: 128 },
   high: { curve: 20, round: 256 },
 };
+
+// Tamaño mínimo (mm) al que se colocan letras en la espiral; por debajo no
+// se leen bien impresas con una boquilla de 0,4 mm.
+const MIN_LEGIBLE = 2.5;
 
 // Solapamiento mínimo entre piezas que se suman, para no depender de caras
 // exactamente coplanares.
@@ -243,41 +250,53 @@ function resampleRing(poly, startAngle, n, anchor = null) {
  * gradualmente del anillo k al k+1 (emparejando puntos por fracción de
  * recorrido), así la espiral hereda la forma del posavasos, aunque sea cóncava.
  *
+ * Si se dan `values` (uno por anillo, p. ej. el tamaño de letra), cada punto
+ * lleva como tercer elemento el valor interpolado entre sus dos anillos y como
+ * cuarto la separación (mm) con la vuelta siguiente en ese punto.
+ *
  * @param {Array<Array<[number, number]>>} rings  Polígonos de fuera a dentro.
- * @returns {Array<[number, number]>}
+ * @returns {Array<[number, number, number?, number?]>}
  */
-export function spiralPath(rings, startAngle = Math.PI / 2, samplesPerTurn = 256) {
+export function spiralPath(rings, startAngle = Math.PI / 2, samplesPerTurn = 256, values = null) {
   // Cada anillo empieza junto al inicio del anterior, para que las vueltas encajen.
   const sampled = [];
   for (const r of rings) {
     sampled.push(resampleRing(r, startAngle, samplesPerTurn, sampled.length ? sampled[sampled.length - 1][0] : null));
   }
+  // Separación entre cada anillo y el siguiente, punto a punto.
+  const gaps = sampled.slice(0, -1).map((ring, k) => ring.map(([ax, ay], j) => Math.hypot(sampled[k + 1][j][0] - ax, sampled[k + 1][j][1] - ay)));
+  const gapAt = (k, j) => (k < gaps.length ? gaps[k][j] : gaps[gaps.length - 1][j]);
   const pts = [];
   for (let k = 0; k + 1 < sampled.length; k++) {
     for (let j = 0; j < samplesPerTurn; j++) {
       const f = j / samplesPerTurn;
       const [ax, ay] = sampled[k][j];
       const [bx, by] = sampled[k + 1][j];
-      pts.push([ax + (bx - ax) * f, ay + (by - ay) * f]);
+      const pt = [ax + (bx - ax) * f, ay + (by - ay) * f];
+      if (values) {
+        pt.push(values[k] + (values[k + 1] - values[k]) * f);
+        // Al final de la vuelta manda la separación con la vuelta de más adentro.
+        pt.push(gapAt(k, j) * (1 - f) + Math.min(gapAt(k, j), gapAt(k + 1, j)) * f);
+      }
+      pts.push(pt);
     }
   }
-  if (sampled.length > 1) pts.push(sampled[sampled.length - 1][0]);
+  if (sampled.length > 1) {
+    const last = sampled.length - 1;
+    pts.push(values ? [...sampled[last][0], values[last], gaps.length ? gapAt(last - 1, 0) : 0] : sampled[last][0]);
+  }
   return pts;
 }
 
-/**
- * Coloca texto a lo largo de un camino: cada letra se gira según la tangente,
- * con la parte de arriba hacia fuera, y centrada verticalmente sobre el camino.
- * Si `avoid(x, y)` es verdadero en un punto, se avanza sin colocar letras.
- */
-export function textAlongPath(font, path, s, curveSegments = 10, avoid = null) {
-  if (path.length < 2) return [];
+/** Recorrido por longitud de arco de un camino [x, y, tamaño?]. */
+function makeTrack(path, defaultSize) {
   const cum = [0];
   for (let i = 1; i < path.length; i++) {
     cum.push(cum[i - 1] + Math.hypot(path[i][0] - path[i - 1][0], path[i][1] - path[i - 1][1]));
   }
   const total = cum[cum.length - 1];
   const at = (d) => {
+    d = Math.min(Math.max(d, 0), total);
     let lo = 0;
     let hi = cum.length - 1;
     while (hi - lo > 1) {
@@ -285,82 +304,177 @@ export function textAlongPath(font, path, s, curveSegments = 10, avoid = null) {
       if (cum[mid] <= d) lo = mid;
       else hi = mid;
     }
-    const seg = cum[hi] - cum[lo] || 1;
-    const f = (d - cum[lo]) / seg;
-    const [ax, ay] = path[lo];
-    const [bx, by] = path[hi];
+    const f = (d - cum[lo]) / (cum[hi] - cum[lo] || 1);
+    const [ax, ay, as = defaultSize] = path[lo];
+    const [bx, by, bs = defaultSize] = path[hi];
     const len = Math.hypot(bx - ax, by - ay) || 1;
-    return { x: ax + (bx - ax) * f, y: ay + (by - ay) * f, tx: (bx - ax) / len, ty: (by - ay) / len };
+    return {
+      x: ax + (bx - ax) * f,
+      y: ay + (by - ay) * f,
+      tx: (bx - ax) / len,
+      ty: (by - ay) / len,
+      size: as + (bs - as) * f,
+    };
   };
+  return { at, total };
+}
 
-  const scale = s.size / font.unitsPerEm;
-  const capHeight = (font.tables.os2?.sCapHeight || font.unitsPerEm * 0.7) * scale;
-  const unit = Array.from(String(s.content || '').replace(/\s*\n\s*/g, ' '));
-  if (!unit.some((ch) => ch.trim())) return [];
-  const cycle = s.repeat ? [...unit, ...Array.from(String(s.separator ?? ''))] : unit;
-  const contours = [];
+/**
+ * Maqueta (sin generar geometría) el texto a lo largo del recorrido: decide
+ * qué letra va en qué posición y con qué tamaño. El tamaño local es el del
+ * camino multiplicado por `gamma`. Se detiene al consumir `limit` caracteres
+ * o al acabarse el camino. Solo empieza palabras que caben enteras.
+ */
+function layoutAlongPath(font, track, s, chars, { gamma = 1, limit = Infinity, avoid = null } = {}) {
+  const { at, total } = track;
+  const charAt = (k) => (s.repeat ? chars[k % chars.length] : chars[k]);
+  const isWordStart = (k) => {
+    const before = k > 0 ? charAt(k - 1) : ' ';
+    return charAt(k).trim() && !(before && before.trim());
+  };
+  const sizeAt = (d) => gamma * at(d).size;
+  // Por debajo de este tamaño no se colocan letras: el tramo se salta.
+  const minSize = s.minSize ?? 0;
+  const tooSmall = (dd) => at(dd).size < minSize; // según el sitio disponible en el camino
+  const placed = [];
   let d = 0;
   let prev = null;
   let i = 0;
-  let resume = false; // tras un salto, se retoma en la siguiente palabra
-  const charAt = (k) => (s.repeat ? cycle[((k % cycle.length) + cycle.length) % cycle.length] : unit[k]);
-  // Con `repeat` el texto (más el separador) se repite hasta agotar el camino.
-  while (true) {
+  // Inicio de la palabra en curso, para poder retroceder si no cabe entera.
+  let word = { i: 0, d: 0, n: 0 };
+  const skipAhead = (from, step) => {
+    placed.length = word.n;
+    i = word.i;
+    d = from + Math.max(step, 0.25);
+    prev = null;
+  };
+  while (i < limit && i < 20000) {
     const ch = charAt(i);
     if (ch === undefined) break;
-    if (resume) {
-      const before = i > 0 ? charAt(i - 1) : ' ';
-      if (!ch.trim() || (before && before.trim())) {
-        i++;
-        if (i > 5000) break;
-        continue;
-      }
-      resume = false;
-    }
+    const size = sizeAt(d);
+    const scale = size / font.unitsPerEm;
+    const spacing = (s.letterSpacing * size) / s.size;
     const g = font.charToGlyph(ch);
-    if (prev) d += font.getKerningValue(prev, g) * scale + s.letterSpacing;
+    if (prev) d += font.getKerningValue(prev, g) * scale + spacing;
     const adv = (g.advanceWidth || 0) * scale;
-    if (d + adv > total) break;
+    if (isWordStart(i)) word = { i, d, n: placed.length };
     // Al empezar una palabra se comprueba que quepa entera (sin huecos ni final
     // del camino por medio), para no dejar trozos de palabra sueltos.
-    const before = i > 0 ? charAt(i - 1) : ' ';
-    if (ch.trim() && !(before && before.trim())) {
+    if (isWordStart(i)) {
       let w = 0;
-      for (let k = i; k < i + 200; k++) {
+      for (let k = i; k < i + 200 && k < limit; k++) {
         const c2 = charAt(k);
         if (c2 === undefined || !c2.trim()) break;
-        w += (font.charToGlyph(c2).advanceWidth || 0) * scale + s.letterSpacing;
+        w += (font.charToGlyph(c2).advanceWidth || 0) * scale + spacing;
       }
-      if (d + w > total) break;
+      w -= spacing;
+      if (d + w > total + 1e-6) break;
       let blocked = false;
-      for (let t = 0; t <= w && !blocked; t += Math.max(s.size / 3, 0.5)) {
-        const c2 = at(Math.min(d + t, total));
-        blocked = !!(avoid && avoid(c2.x, c2.y));
+      const step = Math.max(size / 4, 0.4);
+      for (let t = 0; !blocked; t = Math.min(t + step, w)) {
+        const c2 = at(d + t);
+        blocked = !!(avoid && avoid(c2.x, c2.y, size)) || tooSmall(d + t);
+        if (t >= w) break;
       }
       if (blocked) {
-        d += Math.max(adv / 4, 0.25);
-        prev = null;
+        skipAhead(d, adv / 4);
         continue;
       }
     }
-    const c = at(d + adv / 2);
-    if (avoid && (avoid(c.x, c.y) || avoid(at(d).x, at(d).y) || avoid(at(d + adv).x, at(d + adv).y))) {
-      d += Math.max(adv / 4, 0.25);
-      prev = null;
-      resume = true;
+    if (d + adv > total + 1e-6) {
+      // La palabra no llega a caber: se retira entera.
+      placed.length = word.n;
+      d = word.d;
+      i = word.i;
+      break;
+    }
+    const mid = at(d + adv / 2);
+    const hits = (pt) => avoid(pt.x, pt.y, size);
+    if (ch.trim() && ((avoid && (hits(mid) || hits(at(d)) || hits(at(d + adv)))) || tooSmall(d + adv / 2))) {
+      // Choca a mitad de palabra: la palabra entera se mueve más adelante.
+      skipAhead(Math.max(word.d, d - adv), adv / 4);
       continue;
     }
-    const nx = -c.ty; // normal hacia fuera en un recorrido horario
-    const ny = c.tx;
-    for (const contour of glyphContours(g, -adv / 2, -capHeight / 2, s.size, curveSegments)) {
-      contours.push(contour.map(([lx, ly]) => [c.x + lx * c.tx + ly * nx, c.y + lx * c.ty + ly * ny]));
-    }
+    placed.push({ g, d, adv, size, ch });
     d += adv;
     prev = g;
     i++;
-    if (i > 5000) break; // salvaguarda
   }
-  return contours;
+  return { placed, consumed: i, end: d };
+}
+
+/**
+ * Coloca texto a lo largo de un camino [x, y, tamaño?]: cada letra se gira
+ * según la tangente, con la parte de arriba hacia fuera, centrada sobre el
+ * camino y con el tamaño local del camino (así puede ir de grande a pequeño).
+ *
+ * Con `s.fit` («ajuste perfecto») se elige el número de repeticiones completas
+ * que mejor cabe y se reescalan ligeramente todas las letras para que el texto
+ * termine justo al final del camino.
+ *
+ * @returns {{ contours: number[][][], placed: object[], total: number, end: number,
+ *             gamma: number, fitted: boolean }}
+ */
+export function textAlongPath(font, path, s, curveSegments = 10, avoid = null) {
+  const empty = { contours: [], placed: [], total: 0, end: 0, gamma: 1, fitted: false };
+  if (path.length < 2) return empty;
+  const unit = Array.from(String(s.content || '').replace(/\s*\n\s*/g, ' ').trim());
+  if (!unit.some((ch) => ch.trim())) return empty;
+  const sep = s.repeat ? Array.from(String(s.separator ?? '')) : [];
+  const chars = [...unit, ...sep];
+  const track = makeTrack(path, s.size);
+  const layout = (opts) => layoutAlongPath(font, track, s, chars, { avoid, ...opts });
+
+  let gamma = 1;
+  let limit = Infinity;
+  let fitted = false;
+  if (s.fit) {
+    // Mayor escala con la que caben exactamente `target` caracteres.
+    const solve = (target, lo = 0.3, hi = 2.5) => {
+      if (layout({ gamma: lo, limit: target }).consumed < target) return null;
+      for (let it = 0; it < 30; it++) {
+        const mid = (lo + hi) / 2;
+        if (layout({ gamma: mid, limit: target }).consumed >= target) lo = mid;
+        else hi = mid;
+      }
+      return lo;
+    };
+    const candidates = [];
+    if (s.repeat) {
+      const natural = layout({ gamma: 1 });
+      const reps = Math.max(1, Math.round((natural.consumed + sep.length) / chars.length));
+      for (const k of [reps, reps + 1, reps - 1, reps + 2]) {
+        if (k < 1) continue;
+        const target = k * chars.length - sep.length; // termina con el texto, no con el separador
+        const gm = solve(target);
+        if (gm !== null) candidates.push({ gamma: gm, target });
+      }
+    } else {
+      const gm = solve(unit.length);
+      if (gm !== null) candidates.push({ gamma: gm, target: unit.length });
+    }
+    // Se prefiere la escala más cercana a 1 dentro de márgenes que no juntan las vueltas.
+    const ok = candidates.filter((c) => c.gamma >= 0.8 && c.gamma <= 1.15);
+    const pick = (ok.length ? ok : candidates).sort((a, b) => Math.abs(Math.log(a.gamma)) - Math.abs(Math.log(b.gamma)))[0];
+    if (pick) {
+      gamma = Math.min(pick.gamma, 1.15);
+      limit = pick.target;
+      fitted = pick.gamma <= 1.15;
+    }
+  }
+
+  const { placed, end } = layout({ gamma, limit });
+  const contours = [];
+  const capRatio = (font.tables.os2?.sCapHeight || font.unitsPerEm * 0.7) / font.unitsPerEm;
+  for (const { g, d, adv, size } of placed) {
+    const c = track.at(d + adv / 2);
+    const nx = -c.ty; // normal hacia fuera en un recorrido horario
+    const ny = c.tx;
+    for (const contour of glyphContours(g, -adv / 2, (-capRatio * size) / 2, size, curveSegments)) {
+      contours.push(contour.map(([lx, ly]) => [c.x + lx * c.tx + ly * nx, c.y + lx * c.ty + ly * ny]));
+    }
+  }
+  return { contours, placed, total: track.total, end, gamma, fitted };
 }
 
 /**
@@ -399,20 +513,18 @@ function polygonArea(poly) {
   return a / 2;
 }
 
-function polygonCentroid(poly) {
-  const a = polygonArea(poly);
-  if (Math.abs(a) < 1e-9) {
-    const b = bounds([poly]);
-    return [b.cx, b.cy];
-  }
-  let x = 0;
-  let y = 0;
+/** Distancia mínima desde el origen hasta el borde de un polígono. */
+function distanceToPolygon(poly) {
+  let best = Infinity;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const f = poly[j][0] * poly[i][1] - poly[i][0] * poly[j][1];
-    x += (poly[j][0] + poly[i][0]) * f;
-    y += (poly[j][1] + poly[i][1]) * f;
+    const [ax, ay] = poly[j];
+    const [bx, by] = poly[i];
+    const ex = bx - ax;
+    const ey = by - ay;
+    const t = Math.max(0, Math.min(1, -(ax * ex + ay * ey) / (ex * ex + ey * ey || 1)));
+    best = Math.min(best, Math.hypot(ax + ex * t, ay + ey * t));
   }
-  return [x / (6 * a), y / (6 * a)];
+  return best;
 }
 
 function largestPolygon(polys) {
@@ -581,50 +693,145 @@ export function buildCoaster(wasm, params, fonts = {}) {
       if (!font) warnings.push('No hay ninguna fuente cargada: se omite el texto en espiral.');
       else {
         const sp = p.spiral;
-        // Anillos: contornos de la zona decorable desplazados hacia dentro, uno por vuelta.
-        const pitch = sp.size * sp.lineSpacing;
-        // Centro de la espiral: el punto más interior de la forma (lo último que
-        // queda al ir encogiendo el contorno). En un corazón no es el centro de su caja.
-        // Si la forma se parte en varios trozos al encogerla (los dos lóbulos de un
-        // corazón), se usa el último resto que aún era de una sola pieza.
-        let core = largestPolygon(deco.toPolygons());
-        for (let d = 0.5; ; d += 0.5) {
-          const polys = inset(deco, d).toPolygons();
-          if (polys.length !== 1) break;
-          core = polys[0];
+        let s0 = sp.size;
+        let s1 = Math.min(sp.sizeEnd ?? sp.size, sp.size);
+        // Centro de la espiral: el punto del eje de simetría vertical (todas las
+        // formas lo tienen) más alejado del borde. En un corazón queda por debajo
+        // de la muesca, no en el centro de su caja ni en su centroide.
+        const decoPoly = largestPolygon(deco.toPolygons());
+        const { cy: midY, h: hDeco } = bounds([decoPoly]);
+        let cx = 0;
+        let cy = midY;
+        let bestR = -1;
+        for (let y = midY - hDeco / 2; y <= midY + hDeco / 2; y += 0.25) {
+          const r = distanceToPolygon(decoPoly.map(([x, yy]) => [x, yy - y]));
+          if (r > bestR) {
+            bestR = r;
+            cy = y;
+          }
         }
-        const [cx, cy] = polygonCentroid(core);
-        // Cada anillo se suaviza (apertura + cierre morfológicos) para que sus
-        // esquinas tengan un radio mínimo y las letras no se amontonen en ellas.
-        const R = sp.size * 0.8;
-        const rings = [];
-        for (let k = 0; k < 200; k++) {
-          const d = sp.size * 0.55 + k * pitch;
-          const eroded = inset(deco, d + R);
-          if (eroded.isEmpty()) break;
+
+        // Hueco central: nunca menor que el que necesitan las letras finales
+        // para no enredarse en vueltas demasiado cerradas.
+        const holeFor = (b) => Math.max(sp.innerRadius, b * 1.6) + b * 0.55;
+
+        // Las vueltas son copias a escala del contorno (reducidas hacia el
+        // centro), así toda la forma se llena, incluidas puntas como la del
+        // corazón. La separación mínima entre vueltas se da donde el contorno
+        // pasa más cerca del centro (rIn) y ahí vale lineSpacing × tamaño.
+        const smoothRing = (cs, R) => {
+          const eroded = inset(cs, R);
+          if (eroded.isEmpty()) return null;
           const opened = own(eroded.offset(R, 'Round', 2, q.round));
-          const smooth = own(own(opened.offset(R, 'Round', 2, q.round)).offset(-R, 'Round', 2, q.round));
-          const polys = smooth.toPolygons();
-          if (polys.length !== 1) break; // la forma se ha partido: la espiral acaba aquí
-          rings.push(polys[0].map(([x, y]) => [x - cx, y - cy]));
+          const polys = own(own(opened.offset(R, 'Round', 2, q.round)).offset(-R, 'Round', 2, q.round)).toPolygons();
+          return polys.length === 1 ? polys[0] : null; // si se parte, la espiral acaba
+        };
+        const makeRings = (a, b) => {
+          const holeR = holeFor(b);
+          const outerRing = inset(deco, a * 0.55);
+          const base = outerRing.isEmpty() ? null : largestPolygon(outerRing.toPolygons()).map(([x, y]) => [x - cx, y - cy]);
+          const rIn = base ? distanceToPolygon(base) : 0;
+          // Tamaño de letra según lo cerca del centro que pasa cada vuelta.
+          const sizeAtScale = (lambda) =>
+            b + (a - b) * Math.min(1, Math.max(0, (lambda * rIn - holeR) / Math.max(1e-6, rIn - holeR)));
+          const rings = [];
+          const sizes = [];
+          for (let k = 0, lambda = 1; base && k < 200 && lambda * rIn >= holeR; k++) {
+            const sz = sizeAtScale(lambda);
+            const scaled = own(new CrossSection([base.map(([x, y]) => [x * lambda, y * lambda])], 'NonZero'));
+            const poly = smoothRing(scaled, sz * 1.4);
+            if (!poly) break;
+            rings.push(poly);
+            sizes.push(sz);
+            // Paso hasta la siguiente vuelta según el tamaño medio entre ambas.
+            lambda -= (sp.lineSpacing * sizeAtScale(lambda - (sp.lineSpacing * sz) / (2 * rIn))) / rIn;
+          }
+          return { rings, sizes, holeR };
+        };
+        // Si con estos tamaños no caben al menos 3 anillos (dos vueltas), se
+        // reducen las letras manteniendo la proporción entre inicio y final.
+        // La letra final no baja de 3 mm por esta reducción (legibilidad).
+        const endFor = (f) => Math.min(s1, Math.max(s1 * f, 3));
+        let spiralRings = makeRings(s0, s1);
+        let shrink = 1;
+        while (spiralRings.rings.length < 3 && shrink > 0.3) {
+          shrink *= 0.9;
+          spiralRings = makeRings(Math.max(s0 * shrink, endFor(shrink)), endFor(shrink));
         }
-        const path = spiralPath(rings, (sp.startAngle * Math.PI) / 180, Math.max(128, q.round * 2)).map(
-          ([x, y]) => [x + cx, y + cy],
-        );
-        // Las letras que invadirían el hueco central se saltan (sin perder texto).
-        // y las que pisarían el texto o el logotipo centrales.
-        const hole = sp.innerRadius + sp.size * 0.55;
-        const pad = sp.size * 0.6 + 1;
+        if (shrink < 1 && spiralRings.rings.length >= 3) {
+          s1 = endFor(shrink);
+          s0 = Math.max(s0 * shrink, s1);
+          warnings.push(`Para que la espiral dé al menos dos vueltas, sus letras se han reducido a ${s0.toFixed(1)}–${s1.toFixed(1)} mm.`);
+        } else if (shrink < 1) {
+          spiralRings = makeRings(s0, s1);
+        }
+        const { rings, sizes: ringSizes, holeR } = spiralRings;
+
+        // Donde las vueltas quedan mucho más separadas que en su punto más
+        // estrecho (los lóbulos de un corazón), las letras crecen para llenar
+        // el hueco. Por debajo de 1,45× no se toca, así las formas regulares
+        // (círculo, polígonos, cuadrado) mantienen un tamaño uniforme.
+        const SLACK_START = 1.45;
+        const growFor = (slack) => (sp.adaptive ? Math.min(1.8, Math.max(1, slack / SLACK_START)) : 1);
+        const raw = spiralPath(rings, (sp.startAngle * Math.PI) / 180, Math.max(128, q.round * 2), ringSizes);
+        // Tamaño permitido en cada punto según la separación real con la vuelta
+        // siguiente; se usa la MÍNIMA de su entorno (criterio conservador).
+        const win = Math.max(4, Math.round(raw.length / Math.max(1, rings.length) / 16));
+        const allowed = raw.map(([, , sz], i) => {
+          let gap = Infinity;
+          for (let k = Math.max(0, i - win); k <= Math.min(raw.length - 1, i + win); k++) gap = Math.min(gap, raw[k][3]);
+          const room = gap / (sp.lineSpacing * sz);
+          // Donde las vueltas quedan más juntas de lo previsto (p. ej. junto a
+          // una muesca), las letras encogen para no pisarse; donde sobra sitio
+          // pueden crecer (si está activado «adaptar el tamaño»).
+          return sz * (room < 1 ? Math.max(0.55, room) : growFor(room));
+        });
+        // El tamaño solo puede cambiar poco a poco a lo largo del recorrido
+        // (pasada hacia delante y hacia atrás), sin superar nunca lo permitido.
+        const SLOPE = 0.04; // mm de tamaño por mm de recorrido
+        const sizes = allowed.slice();
+        const stepLen = (i) => Math.hypot(raw[i][0] - raw[i - 1][0], raw[i][1] - raw[i - 1][1]);
+        for (let i = 1; i < sizes.length; i++) sizes[i] = Math.min(sizes[i], sizes[i - 1] + SLOPE * stepLen(i));
+        for (let i = sizes.length - 2; i >= 0; i--) sizes[i] = Math.min(sizes[i], sizes[i + 1] + SLOPE * stepLen(i + 1));
+        const path = raw.map(([x, y], i) => [x + cx, y + cy, sizes[i]]);
+        // Se saltan las letras que invadirían el hueco central o pisarían el
+        // texto o el logotipo centrales.
         const boxes = [textCS, logoCS].filter(Boolean).map((cs) => cs.bounds());
-        const avoid = (x, y) =>
-          Math.hypot(x - cx, y - cy) < hole ||
-          boxes.some((b) => x > b.min[0] - pad && x < b.max[0] + pad && y > b.min[1] - pad && y < b.max[1] + pad);
+        const avoid = (x, y, size) => {
+          const pad = size * 0.6 + 1;
+          return (
+            Math.hypot(x - cx, y - cy) < holeR - s1 * 0.55 + size * 0.55 ||
+            boxes.some((b) => x > b.min[0] - pad && x < b.max[0] + pad && y > b.min[1] - pad && y < b.max[1] + pad)
+          );
+        };
         if (path.length < 2) {
           warnings.push('No cabe ninguna vuelta de espiral: reduce el tamaño de letra o el hueco central.');
         } else {
-          const contours = textAlongPath(font, path, sp, q.curve, avoid);
-          if (contours.length) spiralCS = own(new CrossSection(contours, 'NonZero'));
-          else warnings.push('No cabe el texto en espiral: reduce el tamaño de letra o el hueco central.');
+          const r = textAlongPath(
+            font,
+            path,
+            { ...sp, size: s0, letterSpacing: (sp.letterSpacing * s0) / sp.size, minSize: Math.min(MIN_LEGIBLE, s1) },
+            q.curve,
+            avoid,
+          );
+          if (!r.contours.length) {
+            warnings.push('No cabe el texto en espiral: reduce el tamaño de letra o el hueco central.');
+          } else {
+            spiralCS = own(new CrossSection(r.contours, 'NonZero'));
+            const minSize = Math.min(...r.placed.map((g) => g.size));
+            if (minSize < 3) {
+              warnings.push(
+                `Las letras más pequeñas de la espiral miden ${minSize.toFixed(1)} mm: por debajo de 3 mm pueden no leerse bien con una boquilla de 0,4 mm.`,
+              );
+            }
+            if (sp.fit && !r.fitted) {
+              warnings.push(
+                sp.repeat
+                  ? 'No se ha podido ajustar la espiral a repeticiones completas; prueba otro tamaño de letra.'
+                  : 'El texto es corto para llenar la espiral: activa «Repetir» o aumenta el tamaño de letra.',
+              );
+            }
+          }
         }
       }
     }

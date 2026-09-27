@@ -12,7 +12,15 @@ Todo se calcula en el navegador: no hay servidor ni se sube nada.
   espaciado e interlineado.
 - **Texto en espiral**: recorre el posavasos desde el borde hacia el centro siguiendo su
   forma (espiral circular, cuadrada, hexagonal, en corazón…) y se repite hasta llenarla.
-  Solo coloca palabras enteras y esquiva el hueco central y el texto/logo del centro.
+  - La letra va **de grande a pequeña** (tamaño inicial y final configurables) y la
+    separación entre vueltas se adapta a ella.
+  - **Ajuste perfecto**: elige cuántas repeticiones completas caben y retoca ligeramente
+    el tamaño de todas las letras para que el texto termine justo al final de la espiral.
+  - **Adaptar al espacio**: en formas irregulares (corazón) las letras crecen donde las
+    vueltas quedan más separadas y encogen donde van más juntas, sin pisarse nunca.
+  - Pensado para que se lea impreso: nunca coloca letras de menos de 2,5 mm, solo pone
+    palabras enteras, esquiva el hueco central y el texto/logo del centro, y reduce las
+    letras automáticamente (y lo avisa) si la forma no da para al menos dos vueltas.
 - **Logotipo SVG** en relieve o grabado (se usan las formas con relleno).
 - **Patrón de fondo**: anillos, puntos, rayas u ondas, en relieve o grabado, con un espacio
   libre ajustable alrededor del texto y el logo para que se lean bien.
